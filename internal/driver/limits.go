@@ -1,5 +1,9 @@
 package driver
 
+import (
+	"strings"
+)
+
 // maxVolumeAttachments returns the maximum number of block storage volumes
 // that can be attached to a Linode instance, given the amount of memory the
 // instance has.
@@ -29,3 +33,25 @@ const (
 	// a single Linode instance.
 	maxAttachments = 64
 )
+
+func attachedVolumeCount(hw HardwareInfo) (int, error) {
+	bdev, err := hw.Block()
+	if err != nil {
+		return 0, err
+	}
+	count := 0
+	for _, disk := range bdev.Disks {
+		driveType := strings.ToLower(disk.DriveType.String())
+		// Skip loopbacks, virtual devices, CD-ROMs, and removable drives
+		if disk.IsRemovable || driveType == "virtual" || driveType == "cdrom" {
+			continue
+		}
+
+		// Only consider disks that have partitions and aren't read-only
+		if len(disk.Partitions) > 0 {
+			count++
+		}
+
+	}
+	return count, nil
+}
