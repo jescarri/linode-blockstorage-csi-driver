@@ -1,4 +1,4 @@
-package driver
+package hwinfo
 
 import (
 	"github.com/jaypipes/ghw"

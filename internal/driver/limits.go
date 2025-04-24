@@ -2,6 +2,8 @@ package driver
 
 import (
 	"strings"
+
+	"github.com/linode/linode-blockstorage-csi-driver/pkg/hwinfo"
 )
 
 // maxVolumeAttachments returns the maximum number of block storage volumes
@@ -34,7 +36,7 @@ const (
 	maxAttachments = 64
 )
 
-func attachedVolumeCount(hw HardwareInfo) (int, error) {
+func attachedVolumeCount(hw hwinfo.HardwareInfo) (int, error) {
 	bdev, err := hw.Block()
 	if err != nil {
 		return 0, err
