@@ -8,15 +8,15 @@ import (
 	"testing"
 
 	"github.com/container-storage-interface/spec/lib/go/csi"
-	"github.com/linode/linodego"
 	"go.uber.org/mock/gomock"
 	"k8s.io/mount-utils"
 	"k8s.io/utils/exec"
 
 	"github.com/linode/linode-blockstorage-csi-driver/mocks"
+	"github.com/linode/linode-blockstorage-csi-driver/pkg/hwinfo"
+
 	devicemanager "github.com/linode/linode-blockstorage-csi-driver/pkg/device-manager"
 	filesystem "github.com/linode/linode-blockstorage-csi-driver/pkg/filesystem"
-	linodeclient "github.com/linode/linode-blockstorage-csi-driver/pkg/linode-client"
 	linodevolumes "github.com/linode/linode-blockstorage-csi-driver/pkg/linode-volumes"
 	mountmanager "github.com/linode/linode-blockstorage-csi-driver/pkg/mount-manager"
 )
@@ -468,18 +468,17 @@ func TestNodeUnstageVolume(t *testing.T) {
 
 func TestNodeExpandVolume(t *testing.T) {
 	tests := []struct {
-		name                    string
-		req                     *csi.NodeExpandVolumeRequest
-		resp                    *csi.NodeExpandVolumeResponse
-		expectMounterCalls      func(m *mocks.MockMounter)
-		expectFSCalls           func(m *mocks.MockFileSystem)
-		expectCryptDeviceCalls  func(m *mocks.MockDevice)
-		expectCryptSetUpCalls   func(mc *mocks.MockCryptSetupClient, md *mocks.MockDevice)
-		expectLinodeClientCalls func(m *mocks.MockLinodeClient)
-		expectFormatCalls       func(m *mocks.MockFormater)
-		expectResizeFsCall      func(m *mocks.MockResizeFSer)
-		expectExecCalls         func(m *mocks.MockExecutor, ctrl *gomock.Controller)
-		expectedError           error
+		name                   string
+		req                    *csi.NodeExpandVolumeRequest
+		resp                   *csi.NodeExpandVolumeResponse
+		expectMounterCalls     func(m *mocks.MockMounter)
+		expectFSCalls          func(m *mocks.MockFileSystem)
+		expectCryptDeviceCalls func(m *mocks.MockDevice)
+		expectCryptSetUpCalls  func(mc *mocks.MockCryptSetupClient, md *mocks.MockDevice)
+		expectFormatCalls      func(m *mocks.MockFormater)
+		expectResizeFsCall     func(m *mocks.MockResizeFSer)
+		expectExecCalls        func(m *mocks.MockExecutor, ctrl *gomock.Controller)
+		expectedError          error
 	}{
 		{
 			name: "expandhappypath",
@@ -497,17 +496,7 @@ func TestNodeExpandVolume(t *testing.T) {
 				m.EXPECT().Glob("/dev/sd*").Return([]string{"/dev/sda", "/dev/sdb"}, nil).AnyTimes()
 				m.EXPECT().Stat("/dev/disk/by-id/linode-volkey").Return(nil, nil)
 			},
-			expectLinodeClientCalls: func(m *mocks.MockLinodeClient) {
-				m.EXPECT().GetVolume(gomock.Any(), 1001).Return(&linodego.Volume{
-					ID:   1001,
-					Size: 10,
-				}, nil)
-			},
-			expectExecCalls: func(m *mocks.MockExecutor, ctrl *gomock.Controller) {
-				command := mocks.NewMockCommand(ctrl)
-				m.EXPECT().Command("blockdev", "--getsize64", "/dev/disk/by-id/linode-volkey").Return(command)
-				command.EXPECT().CombinedOutput().Return([]byte("10737418240"), nil)
-			},
+
 			expectResizeFsCall: func(m *mocks.MockResizeFSer) {
 				m.EXPECT().NeedResize("/dev/disk/by-id/linode-volkey", "/mnt/staging").Return(true, nil)
 				m.EXPECT().Resize("/dev/disk/by-id/linode-volkey", "/mnt/staging").Return(true, nil)
@@ -538,17 +527,7 @@ func TestNodeExpandVolume(t *testing.T) {
 				m.EXPECT().Glob("/dev/sd*").Return([]string{"/dev/sda", "/dev/sdb"}, nil).AnyTimes()
 				m.EXPECT().Stat("/dev/disk/by-id/linode-volkey").Return(nil, nil)
 			},
-			expectLinodeClientCalls: func(m *mocks.MockLinodeClient) {
-				m.EXPECT().GetVolume(gomock.Any(), 1001).Return(&linodego.Volume{
-					ID:   1001,
-					Size: 10,
-				}, nil)
-			},
-			expectExecCalls: func(m *mocks.MockExecutor, ctrl *gomock.Controller) {
-				command := mocks.NewMockCommand(ctrl)
-				m.EXPECT().Command("blockdev", "--getsize64", "/dev/disk/by-id/linode-volkey").Return(command)
-				command.EXPECT().CombinedOutput().Return([]byte("10737418240"), nil)
-			},
+
 			expectResizeFsCall: func(m *mocks.MockResizeFSer) {
 				m.EXPECT().NeedResize("/dev/disk/by-id/linode-volkey", "/mnt/staging").Return(true, nil)
 				m.EXPECT().Resize("/dev/disk/by-id/linode-volkey", "/mnt/staging").Return(true, nil)
@@ -632,12 +611,8 @@ func TestNodeExpandVolume(t *testing.T) {
 			mockDevice := mocks.NewMockDevice(ctrl)
 			mockFileSystem := mocks.NewMockFileSystem(ctrl)
 			mockCryptSetupClient := mocks.NewMockCryptSetupClient(ctrl)
-			mockClient := mocks.NewMockLinodeClient(ctrl)
 			mockFormater := mocks.NewMockFormater(ctrl)
 			mockResizeFS := mocks.NewMockResizeFSer(ctrl)
-			if tt.expectLinodeClientCalls != nil {
-				tt.expectLinodeClientCalls(mockClient)
-			}
 
 			if tt.expectMounterCalls != nil {
 				tt.expectMounterCalls(mockMounter)
@@ -668,7 +643,6 @@ func TestNodeExpandVolume(t *testing.T) {
 				},
 				deviceutils: devicemanager.NewDeviceUtils(mockFileSystem, mockExec),
 				encrypt:     NewLuksEncryption(mockExec, mockFileSystem, mockCryptSetupClient),
-				client:      mockClient,
 				resizeFs:    mockResizeFS,
 			}
 			returnedResp, err := ns.NodeExpandVolume(context.Background(), tt.req)
@@ -737,11 +711,11 @@ func TestNodeGetCapabilities(t *testing.T) {
 
 func TestNodeGetInfo(t *testing.T) {
 	tests := []struct {
-		name                    string
-		req                     *csi.NodeGetInfoRequest
-		resp                    *csi.NodeGetInfoResponse
-		expectLinodeClientCalls func(m *mocks.MockLinodeClient)
-		expectedError           error
+		name string
+		req  *csi.NodeGetInfoRequest
+		resp *csi.NodeGetInfoResponse
+		//expectLinodeClientCalls func(m *mocks.MockLinodeClient)
+		expectedError error
 	}{
 		{
 			name: "getinfohappypath",
@@ -763,15 +737,14 @@ func TestNodeGetInfo(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			ctrl := gomock.NewController(t)
 			defer ctrl.Finish()
-			mockClient := mocks.NewMockLinodeClient(ctrl)
 			ns := &NodeServer{
 				driver: &LinodeDriver{},
-				client: mockClient,
 				metadata: Metadata{
 					ID:     10,
 					Region: "testregion",
 					Memory: 10,
 				},
+				hardwareInfo: hwinfo.NewHardwareInfo(),
 			}
 			returnedResp, err := ns.NodeGetInfo(context.Background(), tt.req)
 			if err != nil && !errors.Is(err, tt.expectedError) {
@@ -789,10 +762,10 @@ func TestNewNodeServer(t *testing.T) {
 		linodeDriver *LinodeDriver
 		mounter      *mountmanager.SafeFormatAndMount
 		deviceUtils  devicemanager.DeviceUtils
-		client       linodeclient.LinodeClient
 		metadata     Metadata
 		encrypt      Encryption
 		resizeFs     mountmanager.ResizeFSer
+		hw           hwinfo.HardwareInfo
 	}
 	tests := []struct {
 		name    string
@@ -806,19 +779,19 @@ func TestNewNodeServer(t *testing.T) {
 				linodeDriver: &LinodeDriver{},
 				mounter:      &mountmanager.SafeFormatAndMount{},
 				deviceUtils:  devicemanager.NewDeviceUtils(filesystem.NewFileSystem(), exec.New()),
-				client:       &linodego.Client{},
 				metadata:     Metadata{},
 				encrypt:      Encryption{},
 				resizeFs:     &mount.ResizeFs{},
+				hw:           hwinfo.NewHardwareInfo(),
 			},
 			want: &NodeServer{
-				driver:      &LinodeDriver{},
-				mounter:     &mountmanager.SafeFormatAndMount{},
-				deviceutils: devicemanager.NewDeviceUtils(filesystem.NewFileSystem(), exec.New()),
-				client:      &linodego.Client{},
-				metadata:    Metadata{},
-				encrypt:     Encryption{},
-				resizeFs:    &mount.ResizeFs{},
+				driver:       &LinodeDriver{},
+				mounter:      &mountmanager.SafeFormatAndMount{},
+				deviceutils:  devicemanager.NewDeviceUtils(filesystem.NewFileSystem(), exec.New()),
+				metadata:     Metadata{},
+				encrypt:      Encryption{},
+				resizeFs:     &mount.ResizeFs{},
+				hardwareInfo: hwinfo.NewHardwareInfo(),
 			},
 			wantErr: false,
 		},
@@ -828,10 +801,10 @@ func TestNewNodeServer(t *testing.T) {
 				linodeDriver: nil,
 				mounter:      &mountmanager.SafeFormatAndMount{},
 				deviceUtils:  devicemanager.NewDeviceUtils(filesystem.NewFileSystem(), exec.New()),
-				client:       &linodego.Client{},
 				metadata:     Metadata{},
 				encrypt:      Encryption{},
 				resizeFs:     &mount.ResizeFs{},
+				hw:           nil,
 			},
 			want:    nil,
 			wantErr: true,
@@ -842,10 +815,10 @@ func TestNewNodeServer(t *testing.T) {
 				linodeDriver: &LinodeDriver{},
 				mounter:      nil,
 				deviceUtils:  devicemanager.NewDeviceUtils(filesystem.NewFileSystem(), exec.New()),
-				client:       &linodego.Client{},
 				metadata:     Metadata{},
 				encrypt:      Encryption{},
 				resizeFs:     &mount.ResizeFs{},
+				hw:           nil,
 			},
 			want:    nil,
 			wantErr: true,
@@ -856,23 +829,9 @@ func TestNewNodeServer(t *testing.T) {
 				linodeDriver: &LinodeDriver{},
 				mounter:      &mountmanager.SafeFormatAndMount{},
 				deviceUtils:  nil,
-				client:       &linodego.Client{},
 				metadata:     Metadata{},
 				encrypt:      Encryption{},
-			},
-			want:    nil,
-			wantErr: true,
-		},
-		{
-			name: "nil linode client",
-			args: args{
-				linodeDriver: &LinodeDriver{},
-				mounter:      &mountmanager.SafeFormatAndMount{},
-				deviceUtils:  devicemanager.NewDeviceUtils(filesystem.NewFileSystem(), exec.New()),
-				client:       nil,
-				metadata:     Metadata{},
-				encrypt:      Encryption{},
-				resizeFs:     &mount.ResizeFs{},
+				hw:           nil,
 			},
 			want:    nil,
 			wantErr: true,
@@ -880,7 +839,7 @@ func TestNewNodeServer(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got, err := NewNodeServer(context.Background(), tt.args.linodeDriver, tt.args.mounter, tt.args.deviceUtils, tt.args.client, tt.args.metadata, tt.args.encrypt, tt.args.resizeFs)
+			got, err := NewNodeServer(context.Background(), tt.args.linodeDriver, tt.args.mounter, tt.args.deviceUtils, tt.args.metadata, tt.args.encrypt, tt.args.resizeFs, tt.args.hw)
 			if (err != nil) != tt.wantErr {
 				t.Errorf("NewNodeServer() error = %v, wantErr %v", err, tt.wantErr)
 				return

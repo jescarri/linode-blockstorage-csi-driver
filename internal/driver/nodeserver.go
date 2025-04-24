@@ -15,7 +15,6 @@ limitations under the License.
 */
 
 import (
-	"encoding/json"
 	"errors"
 	"fmt"
 	"os/exec"
@@ -31,7 +30,7 @@ import (
 
 	devicemanager "github.com/linode/linode-blockstorage-csi-driver/pkg/device-manager"
 	filesystem "github.com/linode/linode-blockstorage-csi-driver/pkg/filesystem"
-	linodeclient "github.com/linode/linode-blockstorage-csi-driver/pkg/linode-client"
+	"github.com/linode/linode-blockstorage-csi-driver/pkg/hwinfo"
 	linodevolumes "github.com/linode/linode-blockstorage-csi-driver/pkg/linode-volumes"
 	"github.com/linode/linode-blockstorage-csi-driver/pkg/logger"
 	mountmanager "github.com/linode/linode-blockstorage-csi-driver/pkg/mount-manager"
@@ -39,13 +38,13 @@ import (
 )
 
 type NodeServer struct {
-	driver      *LinodeDriver
-	mounter     *mountmanager.SafeFormatAndMount
-	deviceutils devicemanager.DeviceUtils
-	client      linodeclient.LinodeClient
-	metadata    Metadata
-	encrypt     Encryption
-	resizeFs    mountmanager.ResizeFSer
+	driver       *LinodeDriver
+	mounter      *mountmanager.SafeFormatAndMount
+	deviceutils  devicemanager.DeviceUtils
+	hardwareInfo hwinfo.HardwareInfo
+	metadata     Metadata
+	encrypt      Encryption
+	resizeFs     mountmanager.ResizeFSer
 	// TODO: Only lock mutually exclusive calls and make locking more fine grained
 	mux sync.Mutex
 
@@ -62,7 +61,7 @@ type LsblkOutput struct {
 
 var _ csi.NodeServer = &NodeServer{}
 
-func NewNodeServer(ctx context.Context, linodeDriver *LinodeDriver, mounter *mountmanager.SafeFormatAndMount, deviceUtils devicemanager.DeviceUtils, client linodeclient.LinodeClient, metadata Metadata, encrypt Encryption, resize mountmanager.ResizeFSer) (*NodeServer, error) {
+func NewNodeServer(ctx context.Context, linodeDriver *LinodeDriver, mounter *mountmanager.SafeFormatAndMount, deviceUtils devicemanager.DeviceUtils, metadata Metadata, encrypt Encryption, resize mountmanager.ResizeFSer, hw hwinfo.HardwareInfo) (*NodeServer, error) {
 	log, _ := logger.GetLogger(ctx)
 
 	log.V(4).Info("Creating new NodeServer")
@@ -79,19 +78,15 @@ func NewNodeServer(ctx context.Context, linodeDriver *LinodeDriver, mounter *mou
 		log.Error(nil, "DeviceUtils is nil")
 		return nil, fmt.Errorf("deviceUtils is nil")
 	}
-	if client == nil {
-		log.Error(nil, "Linode client is nil")
-		return nil, fmt.Errorf("linode client is nil")
-	}
 
 	ns := &NodeServer{
-		driver:      linodeDriver,
-		mounter:     mounter,
-		deviceutils: deviceUtils,
-		client:      client,
-		metadata:    metadata,
-		encrypt:     encrypt,
-		resizeFs:    resize,
+		driver:       linodeDriver,
+		mounter:      mounter,
+		deviceutils:  deviceUtils,
+		metadata:     metadata,
+		encrypt:      encrypt,
+		resizeFs:     resize,
+		hardwareInfo: hw,
 	}
 
 	log.V(4).Info("NodeServer created successfully")
@@ -420,32 +415,6 @@ func (ns *NodeServer) NodeExpandVolume(ctx context.Context, req *csi.NodeExpandV
 		return nil, err
 	}
 
-	// Check if size in API is different from actual size
-	// it means the volume has been resized offline
-	linodeVolumeID, err := linodevolumes.VolumeIdAsInt("NodeExpandVolume", req)
-	if err != nil {
-		observability.RecordMetrics(observability.NodeExpandTotal, observability.NodeExpandDuration, observability.Failed, functionStartTime)
-		return nil, errInternal("failed to get volume id: %v", err)
-	}
-
-	volume, err := ns.client.GetVolume(ctx, linodeVolumeID)
-	if err != nil {
-		observability.RecordMetrics(observability.NodeExpandTotal, observability.NodeExpandDuration, observability.Failed, functionStartTime)
-		return nil, errInternal("failed to get volume %d: %v", volume.ID, err)
-	}
-
-	diskSize, err := ns.getDeviceSize(devicePath)
-	if err != nil {
-		observability.RecordMetrics(observability.NodeExpandTotal, observability.NodeExpandDuration, observability.Failed, functionStartTime)
-		return nil, errInternal("failed to get device size: %v", err)
-	}
-
-	const GiB uint64 = 1 << 30
-	if uint64(volume.Size)*GiB != diskSize {
-		log.V(4).Info("Volume size is different from disk siz", "volumeID", volumeID, "volumeSize", volume.Size, "diskSize", diskSize)
-		return nil, status.Error(codes.FailedPrecondition, "volume has been resized, but volume has not been detach / attach")
-	}
-
 	// Resize the volume
 
 	resized, err := ns.resize(devicePath, volumePath)
@@ -500,16 +469,12 @@ func (ns *NodeServer) NodeGetInfo(ctx context.Context, req *csi.NodeGetInfoReque
 	// devices that can be attached.
 	log.V(4).Info("Listing attached block devices", "nodeID", ns.metadata.ID)
 
-	lsblkOutput, err := execRunner("lsblk", "-J", "--nodeps", "-e7")
+	attachedVolumeCount, err := attachedVolumeCount(ns.hardwareInfo)
 	if err != nil {
-		return &csi.NodeGetInfoResponse{}, errInternal("lsblk: %v", err)
-	}
-	var lsblkData LsblkOutput
-	if err := json.Unmarshal(lsblkOutput, &lsblkData); err != nil {
-		return &csi.NodeGetInfoResponse{}, errInternal("error unmarshaling lsblk json output: %s", err)
+		return &csi.NodeGetInfoResponse{}, errInternal("list instance disks: %v", err)
 	}
 
-	maxVolumes := maxVolumeAttachments(ns.metadata.Memory) - len(lsblkData.BlockDevices)
+	maxVolumes := maxVolumeAttachments(ns.metadata.Memory) - attachedVolumeCount
 	log.V(2).Info("functionStatusfully completed")
 	return &csi.NodeGetInfoResponse{
 		NodeId:            strconv.Itoa(ns.metadata.ID),
