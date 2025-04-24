@@ -17,7 +17,6 @@ limitations under the License.
 import (
 	"errors"
 	"fmt"
-	"os/exec"
 	"strconv"
 	"sync"
 	"time"
@@ -49,14 +48,6 @@ type NodeServer struct {
 	mux sync.Mutex
 
 	csi.UnimplementedNodeServer
-}
-
-type BlockDevice struct {
-	Name string `json:"name"`
-}
-
-type LsblkOutput struct {
-	BlockDevices []BlockDevice `json:"blockdevices"`
 }
 
 var _ csi.NodeServer = &NodeServer{}
@@ -446,10 +437,6 @@ func (ns *NodeServer) NodeGetCapabilities(ctx context.Context, req *csi.NodeGetC
 	return &csi.NodeGetCapabilitiesResponse{
 		Capabilities: ns.driver.nscap,
 	}, nil
-}
-
-func execRunner(name string, arg ...string) ([]byte, error) {
-	return exec.Command(name, arg...).CombinedOutput()
 }
 
 func (ns *NodeServer) NodeGetInfo(ctx context.Context, req *csi.NodeGetInfoRequest) (*csi.NodeGetInfoResponse, error) {

@@ -127,12 +127,8 @@ func handle(ctx context.Context) error {
 	log.V(4).Info("Driver vendor version", "version", vendorVersion)
 
 	cfg := loadConfig()
-
-	// Warn if LINODE_TOKEN is not set.
-	// Validation of LINODE_TOKEN being set is moved to the helm chart.
-	// ToDo: Decouple the node-server from the controller code.
 	if cfg.linodeToken == "" {
-		log.V(4).Info("LINODE_TOKEN is not set, this is OK for node-server")
+		return errors.New("linode token required")
 	}
 
 	linodeDriver := driver.GetLinodeDriver(ctx)
