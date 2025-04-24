@@ -49,6 +49,8 @@ spec:
         env:
         - name: CSI_ENDPOINT
           value: unix:///csi/csi.sock
+        - name: DRIVER_ROLE
+          value: nodeserver
         - name: ENABLE_METRICS
           value: {{ .Values.enableMetrics | quote}}
         - name: METRICS_PORT

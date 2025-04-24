@@ -54,6 +54,8 @@ spec:
           env:
             - name: CSI_ENDPOINT
               value: unix:///csi/csi.sock
+            - name: DRIVER_ROLE
+              value: nodeserver
           imagePullPolicy: "Always"
           securityContext:
             # This container must run as privileged due to the requirement for bidirectional mount propagation
