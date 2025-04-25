@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"github.com/container-storage-interface/spec/lib/go/csi"
+	"github.com/jaypipes/ghw"
 	"go.uber.org/mock/gomock"
 	"k8s.io/mount-utils"
 	"k8s.io/utils/exec"
@@ -713,6 +714,7 @@ func TestNodeGetInfo(t *testing.T) {
 		name          string
 		req           *csi.NodeGetInfoRequest
 		resp          *csi.NodeGetInfoResponse
+		blkInfo       *ghw.BlockInfo
 		expectedError error
 	}{
 		{
@@ -728,13 +730,31 @@ func TestNodeGetInfo(t *testing.T) {
 				},
 			},
 			expectedError: nil,
+			blkInfo: &ghw.BlockInfo{
+				Disks: []*ghw.Disk{
+					{
+						DriveType:   ghw.DRIVE_TYPE_SSD,
+						IsRemovable: false,
+						Partitions: []*ghw.Partition{
+							{
+								Name:       "sda",
+								MountPoint: "/",
+								SizeBytes:  1024 * 1024 * 1024,
+							},
+						},
+					},
+				},
+			},
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			ctrl := gomock.NewController(t)
+			mockHW := mocks.NewMockHardwareInfo(ctrl)
 			defer ctrl.Finish()
+			mockHW.EXPECT().Block().Return(tt.blkInfo, nil)
+
 			ns := &NodeServer{
 				driver: &LinodeDriver{},
 				metadata: Metadata{
@@ -742,7 +762,7 @@ func TestNodeGetInfo(t *testing.T) {
 					Region: "testregion",
 					Memory: 10,
 				},
-				hardwareInfo: hwinfo.NewHardwareInfo(),
+				hardwareInfo: mockHW,
 			}
 			returnedResp, err := ns.NodeGetInfo(context.Background(), tt.req)
 			if err != nil && !errors.Is(err, tt.expectedError) {
