@@ -13,10 +13,9 @@ import (
 	"k8s.io/utils/exec"
 
 	"github.com/linode/linode-blockstorage-csi-driver/mocks"
-	"github.com/linode/linode-blockstorage-csi-driver/pkg/hwinfo"
-
 	devicemanager "github.com/linode/linode-blockstorage-csi-driver/pkg/device-manager"
 	filesystem "github.com/linode/linode-blockstorage-csi-driver/pkg/filesystem"
+	"github.com/linode/linode-blockstorage-csi-driver/pkg/hwinfo"
 	linodevolumes "github.com/linode/linode-blockstorage-csi-driver/pkg/linode-volumes"
 	mountmanager "github.com/linode/linode-blockstorage-csi-driver/pkg/mount-manager"
 )
@@ -711,10 +710,9 @@ func TestNodeGetCapabilities(t *testing.T) {
 
 func TestNodeGetInfo(t *testing.T) {
 	tests := []struct {
-		name string
-		req  *csi.NodeGetInfoRequest
-		resp *csi.NodeGetInfoResponse
-		//expectLinodeClientCalls func(m *mocks.MockLinodeClient)
+		name          string
+		req           *csi.NodeGetInfoRequest
+		resp          *csi.NodeGetInfoResponse
 		expectedError error
 	}{
 		{

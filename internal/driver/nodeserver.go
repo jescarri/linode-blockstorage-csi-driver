@@ -440,7 +440,7 @@ func (ns *NodeServer) NodeGetCapabilities(ctx context.Context, req *csi.NodeGetC
 }
 
 func (ns *NodeServer) NodeGetInfo(ctx context.Context, req *csi.NodeGetInfoRequest) (*csi.NodeGetInfoResponse, error) {
-	log, ctx := logger.GetLogger(ctx)
+	log, _ := logger.GetLogger(ctx)
 	log, done := logger.WithMethod(log, "NodeGetInfo")
 	defer done()
 

@@ -5,22 +5,17 @@ import (
 	"testing"
 
 	"github.com/jaypipes/ghw"
-	"github.com/linode/linode-blockstorage-csi-driver/mocks"
 	"go.uber.org/mock/gomock"
+
+	"github.com/linode/linode-blockstorage-csi-driver/mocks"
 )
 
 const (
-	// DEPRECATED: Please use DriveTypeUnknown
 	DRIVE_TYPE_UNKNOWN = iota
-	// DEPRECATED: Please use DriveTypeHDD
 	DRIVE_TYPE_HDD
-	// DEPRECATED: Please use DriveTypeFDD
 	DRIVE_TYPE_FDD
-	// DEPRECATED: Please use DriveTypeODD
 	DRIVE_TYPE_ODD
-	// DEPRECATED: Please use DriveTypeSSD
 	DRIVE_TYPE_SSD
-	// DEPRECATED: Please use DriveTypeVirtual
 	DRIVE_TYPE_VIRTUAL
 )
 
@@ -59,6 +54,7 @@ func TestMaxVolumeAttachments(t *testing.T) {
 
 func TestAttachedVolumeCount(t *testing.T) {
 	t.Parallel()
+
 	tests := []struct {
 		name                string
 		expectedVolumeCount int
@@ -126,19 +122,24 @@ func TestAttachedVolumeCount(t *testing.T) {
 			},
 		},
 	}
+
 	for _, tt := range tests {
-		ctrl := gomock.NewController(t)
-		defer ctrl.Finish()
-		mockHW := mocks.NewMockHardwareInfo(ctrl)
-		mockHW.EXPECT().Block().Return(tt.blkInfo, nil)
-		count, err := attachedVolumeCount(mockHW)
-		if err != nil {
-			t.Fatalf("unexpected error: %v", err)
-		}
-		if count != tt.expectedVolumeCount {
-			t.Errorf("expected %d, got %d", tt.expectedVolumeCount, count)
-		}
+		tt := tt // capture range variable
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			ctrl := gomock.NewController(t)
+			defer ctrl.Finish()
 
+			mockHW := mocks.NewMockHardwareInfo(ctrl)
+			mockHW.EXPECT().Block().Return(tt.blkInfo, nil)
+
+			count, err := attachedVolumeCount(mockHW)
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			if count != tt.expectedVolumeCount {
+				t.Errorf("expected %d, got %d", tt.expectedVolumeCount, count)
+			}
+		})
 	}
-
 }

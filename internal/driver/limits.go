@@ -53,7 +53,6 @@ func attachedVolumeCount(hw hwinfo.HardwareInfo) (int, error) {
 		if len(disk.Partitions) > 0 {
 			count++
 		}
-
 	}
 	return count, nil
 }
