@@ -44,15 +44,11 @@ func attachedVolumeCount(hw hwinfo.HardwareInfo) (int, error) {
 	count := 0
 	for _, disk := range bdev.Disks {
 		driveType := strings.ToLower(disk.DriveType.String())
-		// Skip loopbacks, virtual devices, CD-ROMs, and removable drives
-		if disk.IsRemovable || driveType == "virtual" || driveType == "cdrom" {
+		controllerType := strings.ToLower(disk.StorageController.String())
+		if driveType == "virtual" || driveType == "cdrom" || controllerType == "loop" || controllerType == "unknown" {
 			continue
 		}
-
-		// Only consider disks that have partitions and aren't read-only
-		if len(disk.Partitions) > 0 {
-			count++
-		}
+		count++
 	}
 	return count, nil
 }

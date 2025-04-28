@@ -9,6 +9,7 @@ import (
 
 	"github.com/container-storage-interface/spec/lib/go/csi"
 	"github.com/jaypipes/ghw"
+	"github.com/jaypipes/ghw/pkg/block"
 	"go.uber.org/mock/gomock"
 	"k8s.io/mount-utils"
 	"k8s.io/utils/exec"
@@ -733,8 +734,9 @@ func TestNodeGetInfo(t *testing.T) {
 			blkInfo: &ghw.BlockInfo{
 				Disks: []*ghw.Disk{
 					{
-						DriveType:   ghw.DRIVE_TYPE_SSD,
-						IsRemovable: false,
+						DriveType:         ghw.DRIVE_TYPE_SSD,
+						IsRemovable:       false,
+						StorageController: block.StorageControllerSCSI,
 						Partitions: []*ghw.Partition{
 							{
 								Name:       "sda",

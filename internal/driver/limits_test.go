@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/jaypipes/ghw"
+	"github.com/jaypipes/ghw/pkg/block"
 	"go.uber.org/mock/gomock"
 
 	"github.com/linode/linode-blockstorage-csi-driver/mocks"
@@ -67,11 +68,24 @@ func TestAttachedVolumeCount(t *testing.T) {
 			blkInfo: &ghw.BlockInfo{
 				Disks: []*ghw.Disk{
 					{
-						DriveType:   DRIVE_TYPE_VIRTUAL,
-						IsRemovable: false,
+						DriveType:         DRIVE_TYPE_VIRTUAL,
+						StorageController: block.StorageControllerUnknown,
+						IsRemovable:       false,
 						Partitions: []*ghw.Partition{
 							{
 								Name:       "vd1p1",
+								MountPoint: "/mnt/virtual1",
+								SizeBytes:  1024 * 1024 * 1024,
+							},
+						},
+					},
+					{
+						DriveType:         DRIVE_TYPE_VIRTUAL,
+						StorageController: block.StorageControllerLoop,
+						IsRemovable:       false,
+						Partitions: []*ghw.Partition{
+							{
+								Name:       "loop1",
 								MountPoint: "/mnt/virtual1",
 								SizeBytes:  1024 * 1024 * 1024,
 							},
@@ -86,8 +100,9 @@ func TestAttachedVolumeCount(t *testing.T) {
 			blkInfo: &ghw.BlockInfo{
 				Disks: []*ghw.Disk{
 					{
-						DriveType:   DRIVE_TYPE_VIRTUAL,
-						IsRemovable: false,
+						DriveType:         DRIVE_TYPE_VIRTUAL,
+						IsRemovable:       false,
+						StorageController: block.StorageControllerUnknown,
 						Partitions: []*ghw.Partition{
 							{
 								Name:       "vd1p1",
@@ -97,8 +112,9 @@ func TestAttachedVolumeCount(t *testing.T) {
 						},
 					},
 					{
-						DriveType:   DRIVE_TYPE_VIRTUAL,
-						IsRemovable: false,
+						DriveType:         DRIVE_TYPE_VIRTUAL,
+						IsRemovable:       false,
+						StorageController: block.StorageControllerLoop,
 						Partitions: []*ghw.Partition{
 							{
 								Name:       "loop1",
@@ -108,8 +124,9 @@ func TestAttachedVolumeCount(t *testing.T) {
 						},
 					},
 					{
-						DriveType:   DRIVE_TYPE_SSD,
-						IsRemovable: false,
+						DriveType:         DRIVE_TYPE_SSD,
+						IsRemovable:       false,
+						StorageController: block.StorageControllerSCSI,
 						Partitions: []*ghw.Partition{
 							{
 								Name:       "nvme0n1",
